@@ -1,0 +1,266 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.11.1.770",
+      "templateHash": "2657317534122116202"
+    }
+  },
+  "parameters": {
+    "automationAccountName": {
+      "type": "string",
+      "defaultValue": "subscriptionMaintain"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[deployment().location]"
+    }
+  },
+  "variables": {
+    "contributorRole": "[resourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2021-04-01",
+      "name": "automation",
+      "location": "[parameters('location')]",
+      "tags": {
+        "Cleanup": "Never"
+      }
+    },
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2021-04-01",
+      "name": "innerloop",
+      "location": "[parameters('location')]",
+      "tags": {
+        "Cleanup": "Automatically"
+      }
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(subscription().id, parameters('automationAccountName'), variables('contributorRole'))]",
+      "properties": {
+        "roleDefinitionId": "[variables('contributorRole')]",
+        "principalId": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, 'automation'), 'Microsoft.Resources/deployments', format('{0}-automation', deployment().name))).outputs.automationAccountPrincipalId.value]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, 'automation'), 'Microsoft.Resources/deployments', format('{0}-automation', deployment().name))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2020-10-01",
+      "name": "[format('{0}-automation', deployment().name)]",
+      "resourceGroup": "automation",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "automationAccountName": {
+            "value": "[parameters('automationAccountName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.11.1.770",
+              "templateHash": "13237270600702604279"
+            }
+          },
+          "parameters": {
+            "automationAccountName": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "[resourceGroup().location]"
+            },
+            "today": {
+              "type": "string",
+              "defaultValue": "[utcNow('yyyyMMddTHHmmssZ')]"
+            }
+          },
+          "variables": {
+            "tomorrow": "[dateTimeAdd(parameters('today'), 'P1D', 'yyyy-MM-dd')]",
+            "automationStartTimeMidnight": "[format('{0}T00:01:00+00:00', take(variables('tomorrow'), 10))]",
+            "automationStartTime9am": "[format('{0}T09:00:00+00:00', take(variables('tomorrow'), 10))]",
+            "runbookNames": [
+              "CleanRgResources",
+              "DeleteResourceGroups"
+            ]
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Automation/automationAccounts",
+              "apiVersion": "2022-08-08",
+              "name": "[parameters('automationAccountName')]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "sku": {
+                  "name": "Free"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts/runbooks",
+              "apiVersion": "2022-08-08",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), 'CleanRgResources')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "logVerbose": true,
+                "logProgress": true,
+                "runbookType": "Script",
+                "publishContentLink": {
+                  "uri": "https://raw.githubusercontent.com/Gordonby/Snippets/master/AzureSubscriptionBootstrap/cleanRgResources.ps1",
+                  "version": "1.0.0.0"
+                },
+                "description": "Deletes the resources in tagged resource groups"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts/runbooks",
+              "apiVersion": "2022-08-08",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), 'TagResourceGroupsForDeletion')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "logVerbose": true,
+                "logProgress": true,
+                "runbookType": "Script",
+                "publishContentLink": {
+                  "uri": "https://raw.githubusercontent.com/Gordonby/Snippets/master/AzureSubscriptionBootstrap/tagResourceGroups.ps1",
+                  "version": "1.0.0.0"
+                },
+                "description": "Deletes the resources in tagged resource groups"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts/runbooks",
+              "apiVersion": "2022-08-08",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), 'DeleteResourceGroups')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "logVerbose": true,
+                "logProgress": true,
+                "runbookType": "Script",
+                "publishContentLink": {
+                  "uri": "https://raw.githubusercontent.com/Gordonby/Snippets/master/AzureSubscriptionBootstrap/deleteResourceGroups.ps1",
+                  "version": "1.0.0.0"
+                },
+                "description": "Deletes resource groups"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts/schedules",
+              "apiVersion": "2022-08-08",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), 'Midnight')]",
+              "properties": {
+                "startTime": "[variables('automationStartTimeMidnight')]",
+                "expiryTime": "9999-12-31T23:59:00+00:00",
+                "interval": 1,
+                "frequency": "Day",
+                "timeZone": "Europe/London",
+                "description": "Daily out of hours schedule"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts/schedules",
+              "apiVersion": "2022-08-08",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), '9am')]",
+              "properties": {
+                "startTime": "[variables('automationStartTime9am')]",
+                "expiryTime": "9999-12-31T23:59:00+00:00",
+                "interval": 1,
+                "frequency": "Day",
+                "timeZone": "Europe/London",
+                "description": "Daily out of hours schedule"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "automationJobNightSchedules",
+                "count": "[length(variables('runbookNames'))]"
+              },
+              "type": "Microsoft.Automation/automationAccounts/jobSchedules",
+              "apiVersion": "2022-08-08",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), guid(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), variables('runbookNames')[copyIndex()], 'Midnight'))]",
+              "properties": {
+                "schedule": {
+                  "name": "Midnight"
+                },
+                "runbook": {
+                  "name": "[variables('runbookNames')[copyIndex()]]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+                "[resourceId('Microsoft.Automation/automationAccounts/schedules', parameters('automationAccountName'), 'Midnight')]",
+                "[resourceId('Microsoft.Automation/automationAccounts/runbooks', parameters('automationAccountName'), 'CleanRgResources')]",
+                "[resourceId('Microsoft.Automation/automationAccounts/runbooks', parameters('automationAccountName'), 'DeleteResourceGroups')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts/jobSchedules",
+              "apiVersion": "2022-08-08",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), guid(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), 'TagResourceGroupsForDeletion', 'Midnight'))]",
+              "properties": {
+                "schedule": {
+                  "name": "9am"
+                },
+                "runbook": {
+                  "name": "TagResourceGroupsForDeletion"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+                "[resourceId('Microsoft.Automation/automationAccounts/schedules', parameters('automationAccountName'), '9am')]",
+                "[resourceId('Microsoft.Automation/automationAccounts/schedules', parameters('automationAccountName'), 'Midnight')]",
+                "[resourceId('Microsoft.Automation/automationAccounts/runbooks', parameters('automationAccountName'), 'TagResourceGroupsForDeletion')]"
+              ]
+            }
+          ],
+          "outputs": {
+            "automationAccountPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), '2022-08-08', 'full').identity.principalId]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', 'automation')]"
+      ]
+    }
+  ]
+}
