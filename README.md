@@ -1,7 +1,10 @@
 # Azure Subscription Nightly Cleanup Automation
 
-It's encouraged that Sandbox subscriptions are used for experimentation. This can mean however that Sandboxes become the wild west, becoming a mess of orphaned resources and abandoned projects.
-To keep sandbox subscriptions tidy and cost optimised, Azure Automation can be leveraged. This sample shows how to deploy on a per subscription basis.
+It's encouraged that Sandbox subscriptions are used for experimentation. This can mean however that Sandboxes become the wild west, hosting a mess of orphaned resources and abandoned projects.
+
+To keep sandbox subscriptions tidy and cost optimised, Azure Automation can be leveraged. 
+
+> This sample shows how to deploy on a per subscription basis.
 
 ## Creating automation
 
